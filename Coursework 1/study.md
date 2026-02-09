@@ -1,9 +1,9 @@
-<!-- <script type="text/javascript" 
+<script type="text/javascript" 
   src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML">
 </script>
 <script type="text/x-mathjax-config">
   MathJax.Hub.Config({ tex2jax: {inlineMath: [['$', '$']]}, messageStyle: "none" });
-</script> -->
+</script>
 
 # ELEC70122 Homework 1 — Beginner-Friendly Study Guide
 
@@ -409,8 +409,7 @@ This cell explains what we see in the plots:
 >
 > The expected prediction error at a test point $x$ can be decomposed as:
 >
-> $$\mathbb{E}[(y - \hat{f}(x))^2] = \underbrace{\text{Bias}^2[\hat{f}(x)]}_{\text{systematic error}} + \underbrace{\text{Var}[\hat{f}(x)]}_{\text{sensitivity to data}}$$
-> $$ + \underbrace{\sigma^2}_{\text{irreducible noise}}$$
+> $$\mathbb{E}[(y - \hat{f}(x))^2] = \underbrace{\text{Bias}^2[\hat{f}(x)]}_{\text{systematic error}} + \underbrace{\text{Var}[\hat{f}(x)]}_{\text{sensitivity to data}} + \underbrace{\sigma^2}_{\text{irreducible noise}}$$
 >
 > where:
 > - **Bias** $= \mathbb{E}[\hat{f}(x)] - f(x)$: How far off the *average* prediction is from the truth. High when the model is too simple (can't represent the true function).
@@ -784,7 +783,6 @@ $$\hat{\mathbf{w}}_{\text{Ridge}} = (\Phi^\top \Phi + \alpha I)^{-1} \Phi^\top \
 Introduces the Bayesian version of polynomial regression:
 
 $$y = \mathbf{w}^\top \phi(\mathbf{x}) + \epsilon, \quad \epsilon \sim \mathcal{N}(0, 0.3)$$
-
 $$w_d \sim \mathcal{N}(0, \alpha)$$
 
 Key differences from MLE (Part I):
@@ -796,6 +794,34 @@ Key differences from MLE (Part I):
 
 > **Analogy:** MLE is like betting everything on one horse. Bayesian inference is like spreading your bets across multiple horses based on how likely each is to win, then updating your bets as the race progresses.
 
+> **Deep Dive — The Full Bayesian Generative Model**
+>
+> In Bayesian regression, we treat the entire data-generation process as a probabilistic model. Here is the **generative story** — how we imagine the data came to be:
+>
+> **Step 1 — Draw weights from the prior:**
+> $$\mathbf{w} \sim \mathcal{N}(\mathbf{0}, \alpha I_D)$$
+> Before seeing any data, nature "rolls the dice" and picks a weight vector from a Gaussian distribution centered at zero. The hyperparameter $\alpha$ controls how spread out this distribution is — large $\alpha$ means nature might pick extreme weights (complex functions), small $\alpha$ means nature probably picked weights near zero (simple functions).
+>
+> **Step 2 — For each training point $n = 1, \ldots, N$:**
+> $$y_n = \mathbf{w}^\top \phi(x_n) + \epsilon_n, \quad \epsilon_n \sim \mathcal{N}(0, \sigma^2)$$
+> Each observation is the inner product of the (fixed but unknown) weights with the feature vector, plus independent Gaussian noise.
+>
+> **The joint probability of everything:**
+> $$p(\mathbf{w}, \mathbf{y} | \Phi) = p(\mathbf{w}) \cdot \prod_{n=1}^N p(y_n | \mathbf{w}, \phi(x_n))$$
+>
+> $$= \mathcal{N}(\mathbf{w} | \mathbf{0}, \alpha I) \cdot \prod_{n=1}^N \mathcal{N}(y_n | \mathbf{w}^\top \phi(x_n), \sigma^2)$$
+>
+> **Why this differs fundamentally from MLE:**
+>
+> | | MLE | Bayesian |
+> |---|---|---|
+> | **Weights** | Fixed unknown constants | Random variables with a distribution |
+> | **Goal** | Find the single best $\hat{\mathbf{w}}$ | Find the full distribution $p(\mathbf{w} \| \text{Data})$ |
+> | **Prediction** | One function: $\hat{y} = \hat{\mathbf{w}}^\top \phi(x)$ | Average over all plausible functions |
+> | **Uncertainty** | Not built-in (need bootstrap or other heuristic) | Built-in from the posterior spread |
+>
+> **The key insight:** By maintaining a *distribution* over weights rather than a single point estimate, Bayesian regression naturally produces different amounts of uncertainty in different regions of input space. Where data is abundant, the posterior concentrates → low uncertainty. Where data is scarce, the posterior remains spread out → high uncertainty. This is exactly the behavior we need for safe decision-making under covariate shift.
+
 ### Cell 20 — Q1 Instructions: Bayesian Kernel Regression (Markdown)
 
 Explains the **feature map** $\phi$:
@@ -805,6 +831,52 @@ $$\phi: \mathbb{R} \to \mathbb{R}^D, \quad x \mapsto [1, x, x^2, \ldots, x^D]$$
 This is exactly what `PolynomialFeatures` does. The key insight: once you apply $\phi$, Bayesian polynomial regression *is* Bayesian linear regression on the transformed features.
 
 The cell asks you to derive the **posterior** in closed form.
+
+> **Deep Dive — Feature Maps, Kernels, and the Kernel Trick**
+>
+> The concept of a **feature map** $\phi$ is one of the most powerful ideas in machine learning. It lets us turn a *non-linear* problem into a *linear* one by mapping inputs to a higher-dimensional space.
+>
+> **The general idea:**
+>
+> 1. Raw input $x$ lives in a low-dimensional space (here, $\mathbb{R}^1$).
+> 2. Apply $\phi$: the transformed input $\phi(x)$ lives in a higher-dimensional space ($\mathbb{R}^D$).
+> 3. Apply linear regression in the *high-dimensional* space → this is equivalent to non-linear regression in the original space.
+>
+> **Example with polynomial features ($D = 3$):**
+>
+> $$\phi(x) = [1, x, x^2, x^3]$$
+>
+> The linear model in feature space is:
+> $$f(x) = w_0 \cdot 1 + w_1 \cdot x + w_2 \cdot x^2 + w_3 \cdot x^3 = \mathbf{w}^\top \phi(x)$$
+>
+> This is a *cubic polynomial* in $x$ — nonlinear! But it's *linear in the weights* $\mathbf{w}$, which is what matters for tractable Bayesian inference.
+>
+> **The kernel function:**
+>
+> A **kernel** is defined as the inner product of two inputs in feature space:
+>
+> $$k(x, x') = \langle \phi(x), \phi(x') \rangle = \phi(x)^\top \phi(x')$$
+>
+> For polynomial features of degree $D$, this gives us a **polynomial kernel**. The kernel captures the *similarity* between two inputs as measured in the feature space.
+>
+> **Why kernels matter for Bayesian regression:**
+>
+> The posterior predictive variance at a test point $x^*$ involves the term $\phi(x^*)^\top \Sigma_N \phi(x^*)$. If we expand $\Sigma_N$:
+>
+> $$\Sigma_N = \left(\frac{1}{\alpha}I + \frac{1}{\sigma^2}\Phi^\top\Phi\right)^{-1}$$
+>
+> The matrix $\Phi^\top \Phi$ is related to the **kernel matrix** $K$ where $K_{ij} = k(x_i, x_j) = \phi(x_i)^\top \phi(x_j)$. This means the entire Bayesian inference depends on the data only through pairwise kernel evaluations — the **kernel trick**. This is crucial because:
+>
+> - We can use feature maps $\phi$ that are infinite-dimensional (e.g., the RBF kernel corresponds to an infinite-dimensional feature space), as long as the kernel $k(x, x')$ can be computed in closed form.
+> - Different kernels encode different assumptions about the function we're learning: polynomial kernels assume polynomial structure, RBF kernels assume smooth functions, etc.
+>
+> **Bayesian kernel regression** is simply: choose *any* feature map $\phi$ (not just polynomial), then apply Bayesian linear regression in the feature space. The choice of $\phi$ determines what kind of functions the model can represent.
+>
+> | Feature Map | Kernel | Functions Represented |
+> |---|---|---|
+> | Polynomial: $[1, x, x^2, \ldots, x^D]$ | Polynomial kernel | Polynomials of degree $\leq D$ |
+> | RFF: $\sqrt{2/D}[\cos(w_1 x + b_1), \ldots]$ | Approximates RBF kernel | Smooth, local functions |
+> | Fourier: $[\sin(k x), \cos(k x), \ldots]$ | Periodic kernel | Periodic functions |
 
 ### Cell 21 — Q1 Answer: Posterior Derivation (Markdown)
 
@@ -870,17 +942,75 @@ The predictive variance has two terms:
 >
 > Bayes' theorem is the mathematical formula for updating beliefs:
 >
-> $$\underbrace{p(\mathbf{w} | \text{Data})}_{\text{Posterior}} = \frac{\overbrace{p(\text{Data} | \mathbf{w})}^{\text{Likelihood}} \times \overbrace{p(\mathbf{w})}^{\text{Prior}}}{\underbrace{p(\text{Data})}_{\text{Evidence}}}$$
->
->*Posterior*: what we believe after seeing data
->
->*Likelihood*: how well **w** explains the data
->
->*Prior*: what we believed before
->
->*Evidence*: normalizing constant
+> $$\underbrace{p(\mathbf{w} | \text{Data})}_{\text{Posterior: what we believe after seeing data}} = \frac{\overbrace{p(\text{Data} | \mathbf{w})}^{\text{Likelihood: how well } \mathbf{w} \text{ explains the data}} \times \overbrace{p(\mathbf{w})}^{\text{Prior: what we believed before}}}{\underbrace{p(\text{Data})}_{\text{Evidence: normalizing constant}}}$$
 >
 > The denominator $p(\text{Data})$ doesn't depend on $\mathbf{w}$ — it just ensures the posterior integrates to 1. That's why we often write $p(\mathbf{w} | \text{Data}) \propto p(\text{Data} | \mathbf{w}) \cdot p(\mathbf{w})$.
+
+> **Deep Dive — Full Derivation: Completing the Square**
+>
+> Let's derive the posterior step-by-step from scratch. This is the core mathematical technique of Bayesian linear regression.
+>
+> **Start with the log-posterior:**
+>
+> $$\log p(\mathbf{w} | \mathbf{y}, \Phi) = \log p(\mathbf{y} | \Phi, \mathbf{w}) + \log p(\mathbf{w}) + \text{const}$$
+>
+> **Expand the log-likelihood:**
+>
+> $$\log p(\mathbf{y} | \Phi, \mathbf{w}) = -\frac{N}{2}\log(2\pi\sigma^2) - \frac{1}{2\sigma^2}(\mathbf{y} - \Phi\mathbf{w})^\top(\mathbf{y} - \Phi\mathbf{w})$$
+>
+> $$= -\frac{N}{2}\log(2\pi\sigma^2) - \frac{1}{2\sigma^2}\left[\mathbf{y}^\top\mathbf{y} - 2\mathbf{y}^\top\Phi\mathbf{w} + \mathbf{w}^\top\Phi^\top\Phi\mathbf{w}\right]$$
+>
+> **Expand the log-prior:**
+>
+> $$\log p(\mathbf{w}) = -\frac{D}{2}\log(2\pi\alpha) - \frac{1}{2\alpha}\mathbf{w}^\top\mathbf{w}$$
+>
+> **Combine (keeping only terms that depend on $\mathbf{w}$):**
+>
+> $$\log p(\mathbf{w} | \mathbf{y}, \Phi) = -\frac{1}{2}\mathbf{w}^\top\underbrace{\left(\frac{1}{\alpha}I + \frac{1}{\sigma^2}\Phi^\top\Phi\right)}_{\Lambda_N \;=\; \Sigma_N^{-1}}\mathbf{w} + \underbrace{\frac{1}{\sigma^2}\mathbf{y}^\top\Phi}_{\mathbf{v}^\top}\mathbf{w} + \text{const}$$
+>
+> **Complete the square** (the key algebraic trick):
+>
+> Any expression of the form $-\frac{1}{2}\mathbf{w}^\top A\mathbf{w} + \mathbf{v}^\top\mathbf{w}$ can be rewritten as:
+>
+> $$-\frac{1}{2}(\mathbf{w} - A^{-1}\mathbf{v})^\top A (\mathbf{w} - A^{-1}\mathbf{v}) + \frac{1}{2}\mathbf{v}^\top A^{-1}\mathbf{v}$$
+>
+> The last term is constant in $\mathbf{w}$. Setting $A = \Lambda_N$ and $\mathbf{v} = \frac{1}{\sigma^2}\Phi^\top\mathbf{y}$:
+>
+> $$\log p(\mathbf{w} | \mathbf{y}, \Phi) = -\frac{1}{2}(\mathbf{w} - \mu_N)^\top \Sigma_N^{-1} (\mathbf{w} - \mu_N) + \text{const}$$
+>
+> where $\mu_N = \Sigma_N \cdot \frac{1}{\sigma^2}\Phi^\top\mathbf{y}$ and $\Sigma_N = \Lambda_N^{-1}$.
+>
+> This is the log of a Gaussian! Therefore: $p(\mathbf{w} | \mathbf{y}, \Phi) = \mathcal{N}(\mu_N, \Sigma_N)$. $\blacksquare$
+
+> **Deep Dive — Deriving the Posterior Predictive Distribution**
+>
+> Once we have the posterior $p(\mathbf{w} | \text{Data}) = \mathcal{N}(\mu_N, \Sigma_N)$, how do we make predictions at a new point $x^*$?
+>
+> **Step 1 — Predictive mean of the function value:**
+>
+> $$f(x^*) = \mathbf{w}^\top \phi(x^*)$$
+>
+> Since $\mathbf{w}$ is Gaussian with mean $\mu_N$:
+>
+> $$\mathbb{E}[f(x^*)] = \mu_N^\top \phi(x^*)$$
+>
+> **Step 2 — Predictive variance of the function value:**
+>
+> $$\text{Var}[f(x^*)] = \phi(x^*)^\top \text{Var}[\mathbf{w}] \phi(x^*) = \phi(x^*)^\top \Sigma_N \phi(x^*)$$
+>
+> This uses the identity $\text{Var}[A\mathbf{z}] = A \text{Var}[\mathbf{z}] A^\top$ for a linear transformation.
+>
+> **Step 3 — Add observation noise:**
+>
+> The observed value $y^* = f(x^*) + \epsilon$ where $\epsilon \sim \mathcal{N}(0, \sigma^2)$ is independent of $f$:
+>
+> $$\text{Var}[y^*] = \text{Var}[f(x^*)] + \text{Var}[\epsilon] = \phi(x^*)^\top \Sigma_N \phi(x^*) + \sigma^2$$
+>
+> **Result:**
+>
+> $$p(y^* | x^*, \text{Data}) = \mathcal{N}\left(\mu_N^\top \phi(x^*), \; \sigma^2 + \phi(x^*)^\top \Sigma_N \phi(x^*)\right)$$
+>
+> **Key geometric insight:** The epistemic variance $\phi(x^*)^\top \Sigma_N \phi(x^*)$ is a **quadratic form** — it measures the "length" of $\phi(x^*)$ as measured by the posterior covariance matrix. Directions in feature space that are well-constrained by data have small $\Sigma_N$ eigenvalues → small variance. Directions that are poorly constrained retain large prior variance → large predictive uncertainty. This is why Bayesian regression automatically gives higher uncertainty in the gap.
 
 ---
 
@@ -888,7 +1018,163 @@ The predictive variance has two terms:
 
 Asks to visualize the 95% posterior predictive interval for all combinations of $D = [1,3,5,10,15,20,50,100]$ and $\alpha = [0.1, 1, 5, 10, 100]$.
 
-Also introduces **Random Fourier Features** as extra credit — a non-polynomial feature map that approximates a **Gaussian Process** as the number of features grows.
+The cell also introduces **Random Fourier Features (RFF)** as extra credit — a powerful non-polynomial feature map that approximates a **Gaussian Process** as the number of features grows. This is a central idea connecting finite-dimensional Bayesian regression to the infinite-dimensional world of GPs.
+
+> **Deep Dive — Random Fourier Features: Full Theory and Intuition**
+>
+> #### What problem does RFF solve?
+>
+> Polynomial features $\phi(x) = [1, x, x^2, \ldots, x^D]$ have a fundamental limitation: polynomials are *global* basis functions. A large $x^{50}$ term affects the prediction everywhere. This is why high-degree polynomials oscillate wildly in the gap.
+>
+> What if we could use *local* basis functions — features that respond to nearby inputs and decay for distant ones? This is exactly what the **Radial Basis Function (RBF) kernel** does:
+>
+> $$k_{\text{RBF}}(x, x') = \exp\left(-\frac{\|x - x'\|^2}{2\ell^2}\right)$$
+>
+> where $\ell$ is the **length-scale** parameter. This kernel measures similarity: $k(x, x') \approx 1$ when $x$ and $x'$ are close, and $k(x, x') \approx 0$ when they're far apart.
+>
+> **The problem:** The RBF kernel corresponds to an *infinite-dimensional* feature space — there's no finite $\phi(x)$ such that $\phi(x)^\top \phi(x') = k_{\text{RBF}}(x, x')$ exactly. So we can't directly apply our Bayesian linear regression machinery, which needs finite-dimensional feature vectors.
+>
+> **The solution:** Random Fourier Features give us a *finite-dimensional approximation* $\hat{\phi}(x) \in \mathbb{R}^D$ such that:
+>
+> $$\hat{\phi}(x)^\top \hat{\phi}(x') \approx k_{\text{RBF}}(x, x')$$
+>
+> and the approximation improves as $D \to \infty$.
+>
+> #### The mathematical foundation: Bochner's Theorem
+>
+> The theoretical basis for RFF is **Bochner's theorem** (1932), which states:
+>
+> > A continuous, shift-invariant kernel $k(x, x') = k(x - x')$ is positive definite **if and only if** it is the Fourier transform of a non-negative measure $p(\omega)$:
+> >
+> > $$k(x - x') = \int_{\mathbb{R}^{D'}} p(\omega) \, e^{i\omega^\top(x - x')} \, d\omega$$
+>
+> For the RBF kernel with length-scale $\ell$, the spectral density $p(\omega)$ turns out to be a Gaussian:
+>
+> $$p(\omega) = \mathcal{N}\left(\omega \,\Big|\, \mathbf{0}, \frac{1}{\ell^2} I\right)$$
+>
+> In other words, the RBF kernel can be written as an *expectation* over random frequencies:
+>
+> $$k(x, x') = \mathbb{E}_{\omega \sim p(\omega)}\left[e^{i\omega^\top x} \cdot e^{-i\omega^\top x'}\right]$$
+>
+> Using Euler's formula ($e^{i\theta} = \cos\theta + i\sin\theta$) and the fact that $k$ is real-valued, we can rewrite this as:
+>
+> $$k(x, x') = \mathbb{E}_{\omega, b}\left[2\cos(\omega^\top x + b) \cdot \cos(\omega^\top x' + b)\right]$$
+>
+> where $\omega \sim \mathcal{N}(0, \frac{1}{\ell^2}I)$ and $b \sim \text{Uniform}[0, 2\pi]$.
+>
+> #### From expectation to Monte Carlo approximation
+>
+> The key insight: we can approximate this expectation by **Monte Carlo sampling**. Draw $D$ random pairs $(\omega_d, b_d)$:
+>
+> $$\omega_d \sim \mathcal{N}\left(0, \frac{1}{\ell^2} I\right), \quad b_d \sim \text{Uniform}[0, 2\pi]$$
+>
+> Then define the Random Fourier Feature map:
+>
+> $$\boxed{\hat{\phi}(x) = \sqrt{\frac{2}{D}} \left[\cos(\omega_1^\top x + b_1), \;\cos(\omega_2^\top x + b_2), \;\ldots, \;\cos(\omega_D^\top x + b_D)\right]}$$
+>
+> **Why this works:** The inner product of two RFF vectors is:
+>
+> $$\hat{\phi}(x)^\top \hat{\phi}(x') = \frac{2}{D} \sum_{d=1}^D \cos(\omega_d^\top x + b_d) \cos(\omega_d^\top x' + b_d)$$
+>
+> By the Law of Large Numbers, as $D \to \infty$:
+>
+> $$\hat{\phi}(x)^\top \hat{\phi}(x') \xrightarrow{\text{a.s.}} \mathbb{E}\left[2\cos(\omega^\top x + b) \cos(\omega^\top x' + b)\right] = k_{\text{RBF}}(x, x')$$
+>
+> The $\sqrt{2/D}$ scaling factor ensures that each feature contributes equally to the sum, and the approximation error decreases as $O(1/\sqrt{D})$.
+>
+> #### The RFF formula in the notebook
+>
+> The notebook uses the notation $\beta$ instead of $1/\ell^2$ for the spectral variance. With $\beta = 10$ and 1D input ($D' = 1$):
+>
+> $$\omega_d \sim \mathcal{N}(0, \beta) = \mathcal{N}(0, 10), \quad b_d \sim \text{Uniform}[0, 2\pi]$$
+>
+> This corresponds to an RBF kernel with length-scale $\ell = 1/\sqrt{\beta} = 1/\sqrt{10} \approx 0.316$. A small length-scale means the kernel decays quickly — the model considers only nearby points as "similar." This is a *local* model, in contrast to the *global* polynomial model.
+>
+> #### Step-by-step implementation
+>
+> ```python
+> # Step 1: Sample random frequencies and biases (do this ONCE, then fix them)
+> D = 50           # number of random features
+> beta = 10        # spectral variance (controls length-scale)
+> D_prime = 1      # input dimensionality
+>
+> np.random.seed(42)
+> W = np.random.normal(0, np.sqrt(beta), size=(D, D_prime))  # shape: (D, D')
+> b = np.random.uniform(0, 2 * np.pi, size=D)                # shape: (D,)
+>
+> # Step 2: Define the feature map
+> def rff_features(x, W, b):
+>     """Compute RFF features for input x.
+>     x: shape (N,) or (N, D')
+>     Returns: shape (N, D) feature matrix
+>     """
+>     x = x.reshape(-1, D_prime)          # (N, D')
+>     z = x @ W.T + b                     # (N, D) — linear projection + bias
+>     return np.sqrt(2.0 / D) * np.cos(z) # (N, D) — apply cosine + scale
+>
+> # Step 3: Use RFF features in place of polynomial features
+> Phi_train_rff = rff_features(x_train, W, b)   # replaces PolynomialFeatures
+> Phi_test_rff = rff_features(x_test, W, b)
+>
+> # Step 4: Apply standard Bayesian linear regression on the RFF features
+> post_pred, post_pred_samples = get_posterior_samples(
+>     prior_var=alpha, noise_var=noise_var,
+>     x_matrix=Phi_train_rff, y_matrix=y_train,
+>     x_test_matrix=Phi_test_rff, samples=200
+> )
+> ```
+>
+> **Critical point:** The random frequencies $W$ and biases $b$ are sampled **once** and then **fixed** for all subsequent computations. They are not learned — they define the feature map. Only the weights $\mathbf{w}$ on top of these features are learned via Bayesian inference.
+>
+> #### Why RFF produces better uncertainty than polynomials
+>
+> Consider what happens in the gap region $[-0.5, 0.5]$:
+>
+> - **Polynomial features:** $\phi(0) = [1, 0, 0, 0, \ldots, 0]$ (all higher-order terms vanish at $x = 0$). The feature vector at the gap center looks very similar to the intercept. The polynomial is forced to interpolate smoothly through the gap, producing overconfident predictions.
+>
+> - **RFF features:** $\hat{\phi}(0) = \sqrt{2/D}[\cos(b_1), \cos(b_2), \ldots, \cos(b_D)]$. Each feature is a cosine evaluated at a random phase — the resulting feature vector at the gap center is *not* constrained to lie in the span of the training features. The posterior has genuine uncertainty about what the function does in the gap.
+>
+> More precisely, RFF features are *local*: they respond to the local frequency content of the data. Since there's no data in the gap, the posterior for the RFF model is informed only by the prior in the gap → wide predictive intervals. This is the correct behavior!
+>
+> #### The connection to Gaussian Processes
+>
+> A **Gaussian Process (GP)** is a distribution over *functions* — the infinite-dimensional generalization of a multivariate Gaussian. Instead of a finite weight vector $\mathbf{w} \in \mathbb{R}^D$, a GP defines a distribution directly on function values $f(x)$.
+>
+> A GP is specified by a mean function $m(x)$ and a kernel function $k(x, x')$:
+>
+> $$f \sim \mathcal{GP}(m(x), k(x, x'))$$
+>
+> This means: for any finite set of inputs $\{x_1, \ldots, x_N\}$, the function values $[f(x_1), \ldots, f(x_N)]$ are jointly Gaussian:
+>
+> $$\begin{bmatrix} f(x_1) \\ \vdots \\ f(x_N) \end{bmatrix} \sim \mathcal{N}\left(\begin{bmatrix} m(x_1) \\ \vdots \\ m(x_N) \end{bmatrix}, \begin{bmatrix} k(x_1, x_1) & \cdots & k(x_1, x_N) \\ \vdots & \ddots & \vdots \\ k(x_N, x_1) & \cdots & k(x_N, x_N) \end{bmatrix}\right)$$
+>
+> **The convergence result:** As $D \to \infty$, Bayesian linear regression with RFF features converges to a GP with the RBF kernel:
+>
+> $$\text{BLR with RFF} \xrightarrow{D \to \infty} \mathcal{GP}(0, \alpha \cdot k_{\text{RBF}})$$
+>
+> **Proof sketch:** The prior over functions in Bayesian linear regression with RFF is:
+>
+> $$f(x) = \mathbf{w}^\top \hat{\phi}(x), \quad \mathbf{w} \sim \mathcal{N}(0, \alpha I_D)$$
+>
+> The prior covariance between function values at two points is:
+>
+> $$\text{Cov}(f(x), f(x')) = \alpha \cdot \hat{\phi}(x)^\top \hat{\phi}(x') \xrightarrow{D \to \infty} \alpha \cdot k_{\text{RBF}}(x, x')$$
+>
+> Since $f(x)$ is a linear combination of Gaussian weights, $f$ is Gaussian for any finite set of inputs. Gaussian + the converging covariance structure = Gaussian Process with RBF kernel.
+>
+> This means RFF gives us a **practical, finite-dimensional approximation** to the gold-standard Gaussian Process model. The GP is theoretically ideal (infinite flexibility, principled uncertainty), but computationally expensive ($O(N^3)$ for $N$ training points). RFF reduces this to $O(ND^2)$ — much faster when $D \ll N$.
+>
+> #### Summary: RFF vs Polynomial Features
+>
+> | Property | Polynomial Features | Random Fourier Features |
+> |---|---|---|
+> | **Basis functions** | $1, x, x^2, \ldots, x^D$ (global) | $\cos(\omega_d x + b_d)$ (local) |
+> | **Kernel approximated** | Polynomial kernel | RBF (Gaussian) kernel |
+> | **Behaviour in gap** | Forced interpolation (overconfident) | Genuine uncertainty (honest) |
+> | **As $D \to \infty$** | Includes all polynomials | Converges to GP with RBF kernel |
+> | **Parameters learned** | Weights $\mathbf{w}$ | Weights $\mathbf{w}$ (frequencies $\omega_d$ fixed) |
+> | **Numerical stability** | $x^{100}$ causes overflow | $\cos(\cdot)$ always in $[-1, 1]$ |
+> | **Smoothness assumption** | Polynomial smoothness | Infinite differentiability (RBF) |
 
 ### Cell 23 — Q2 Code: Bayesian Posterior Predictive Grid (Code)
 
@@ -1183,6 +1469,50 @@ The prior has no influence, and the posterior mean equals the MLE solution. The 
 $$\mu_N \to \mathbf{0}$$
 
 The prior dominates — the model ignores the data and predicts everything as zero. This is extreme regularization.
+</details>
+
+<details>
+<summary><strong>Q4:</strong> In Random Fourier Features, the frequencies $\omega_d$ and biases $b_d$ are sampled randomly but then <em>fixed</em>. Why aren't they learned from the data?</summary>
+
+The frequencies and biases define the **feature map** $\hat{\phi}$, not the model parameters. Their purpose is to approximate the RBF kernel via Monte Carlo sampling (Bochner's theorem). If we optimized them, we'd be solving a much harder non-convex optimization problem and would lose the elegant convergence guarantee ($\hat{\phi}(x)^\top \hat{\phi}(x') \to k_{\text{RBF}}(x, x')$ as $D \to \infty$). By keeping them random and fixed, the features remain an unbiased estimate of the kernel, and the only learning happens through the weight posterior — which remains tractable via standard Bayesian linear regression.
+
+In practice, some advanced methods *do* optimize the frequencies (this is called "learned kernel approximation"), but it sacrifices closed-form inference.
+</details>
+
+<details>
+<summary><strong>Q5:</strong> Explain why RFF features produce wider predictive intervals in the gap than polynomial features, even for the same $D$ and $\alpha$.</summary>
+
+**Polynomial features** at a point $x$ in the gap (e.g., $x = 0$) give $\phi(0) = [1, 0, 0, \ldots, 0]$ — the feature vector is dominated by the intercept and lies in a very specific direction in feature space. This direction is well-constrained by the training data (since every training point also has a 1 in the intercept position). The posterior has low variance in this direction → narrow interval.
+
+**RFF features** at $x = 0$ give $\hat{\phi}(0) = \sqrt{2/D}[\cos(b_1), \cos(b_2), \ldots, \cos(b_D)]$ — a vector of random cosines that can point in *any* direction in feature space. This direction may not be well-represented in the training data, especially since the training data doesn't include points near 0. The posterior retains high prior variance in poorly-constrained directions → wide interval.
+
+In geometric terms: polynomial features at the gap center collapse to a low-dimensional subspace of the feature space, while RFF features explore the full $D$-dimensional space, exposing the genuine lack of information.
+</details>
+
+<details>
+<summary><strong>Q6:</strong> A Gaussian Process with RBF kernel has a length-scale $\ell = 0.316$ (corresponding to $\beta = 10$). What does this mean for predictions in the gap $[-0.5, 0.5]$?</summary>
+
+The length-scale $\ell = 0.316$ means the kernel decays significantly over distances greater than $\ell$. Specifically, $k(x, x') = \exp(-\|x - x'\|^2 / (2 \ell^2))$. At a gap center point $x = 0$, the nearest training points are at $x' = \pm 0.5$, a distance of 0.5. The kernel value is:
+
+$$k(0, 0.5) = \exp\left(-\frac{0.25}{2 \times 0.1}\right) = \exp(-1.25) \approx 0.287$$
+
+This is a moderate but not strong correlation — the model considers $x = 0$ to be only weakly related to the nearest training data. Contrast this with $\ell = 10$ (a very long length-scale), where $k(0, 0.5) \approx 0.9999$ and the model would treat gap points as nearly identical to training points (overconfident). The choice $\beta = 10$ ($\ell \approx 0.316$) strikes a balance: the model can learn from nearby data but doesn't blindly extrapolate into the gap.
+</details>
+
+<details>
+<summary><strong>Q7:</strong> Write the posterior predictive distribution for Bayesian linear regression at a new test point $x^*$. Clearly label which terms represent aleatoric and epistemic uncertainty, and explain how each behaves as (a) training data grows, and (b) $x^*$ moves into the gap.</summary>
+
+$$p(y^* | x^*, \text{Data}) = \mathcal{N}\left(\underbrace{\mu_N^\top \phi(x^*)}_{\text{predictive mean}}, \; \underbrace{\sigma^2}_{\text{aleatoric}} + \underbrace{\phi(x^*)^\top \Sigma_N \phi(x^*)}_{\text{epistemic}}\right)$$
+
+**(a) As training data $N$ grows:**
+- **Aleatoric** ($\sigma^2$): Unchanged — noise is a property of the data-generating process, not the model.
+- **Epistemic** ($\phi(x^*)^\top \Sigma_N \phi(x^*)$): Decreases in data-rich regions (the posterior concentrates), but stays large in the gap (where $\Phi^\top \Phi$ provides no information).
+
+**(b) As $x^*$ moves into the gap:**
+- **Aleatoric** ($\sigma^2$): Unchanged — noise doesn't depend on $x^*$.
+- **Epistemic** ($\phi(x^*)^\top \Sigma_N \phi(x^*)$): Increases, because the feature direction $\phi(x^*)$ is not well-represented in the training data matrix $\Phi$. The posterior remains close to the prior in these directions → large variance.
+
+This is the ideal behavior: total uncertainty = constant noise floor + variable model uncertainty that responds to data density.
 </details>
 
 ---
@@ -1538,7 +1868,7 @@ Key takeaways:
 >
 > The **Brier score decomposition** reveals its components:
 >
-> $$\text{Brier} = \underbrace{\frac{1}{N}\sum_b n_b(\bar{p}_b - \bar{y}_b)^2}_{\text{Calibration (REL)}} - \underbrace{\frac{1}{N}\sum_b n_b(\bar{y}_b - \bar{y})^2}_{\text{Resolution (RES)}} +\underbrace{\bar{y}(1-\bar{y})}_{\text{Uncertainty (UNC)}}$$
+> $$\text{Brier} = \underbrace{\frac{1}{N}\sum_b n_b(\bar{p}_b - \bar{y}_b)^2}_{\text{Calibration (REL)}} - \underbrace{\frac{1}{N}\sum_b n_b(\bar{y}_b - \bar{y})^2}_{\text{Resolution (RES)}} + \underbrace{\bar{y}(1-\bar{y})}_{\text{Uncertainty (UNC)}}$$
 >
 > - **Calibration (REL)**: Same as ECE squared — measures miscalibration. Lower is better.
 > - **Resolution (RES)**: How much the model's predictions vary across bins. Higher is better (subtracted).
@@ -1957,8 +2287,8 @@ $$w_i = \frac{p_{\text{test}}(x_i)}{p_{\text{cal}}(x_i)}$$
 >
 > A sequence of random variables $Z_1, Z_2, \ldots, Z_n$ is **exchangeable** if their joint distribution is invariant to permutation:
 >
-> $$p(Z_1, Z_2, \ldots, Z_n) = p(Z_{\pi(1)}, Z_{\pi(2)}, \ldots, Z_{\pi(n)})$$
-> $$\text{for all permutations } \pi$$
+> $$p(Z_1, Z_2, \ldots, Z_n) = p(Z_{\pi(1)}, Z_{\pi(2)}, \ldots, Z_{\pi(n)}) \quad \text{for all permutations } \pi$$
+>
 > Every i.i.d. sequence is exchangeable, but exchangeability is weaker — it allows dependence, as long as the dependence is "symmetric." For example, draws without replacement from a finite population are exchangeable but not independent. Conformal prediction only needs exchangeability, making it applicable in slightly more settings than methods that require full independence.
 
 ---
@@ -2016,7 +2346,7 @@ Both are possible. If the model happens to be *more* accurate in the shifted tes
 
 These questions span the entire homework. Try to answer each one before revealing the answer.
 
-<!-- <details> -->
+<details>
 <summary><strong>Q1:</strong> What is the single most important theme of this entire homework?</summary>
 
 Managing model risk under **covariate shift**. Every part explores a different angle:
@@ -2026,9 +2356,9 @@ Managing model risk under **covariate shift**. Every part explores a different a
 - Part IV shows how to *guarantee* coverage even without knowing the model is correct (conformal prediction).
 
 The unifying lesson: standard ML practices (CV, regularization, MLE) optimize for in-distribution performance but can produce dangerously overconfident predictions under shift.
-<!-- </details> -->
+</details>
 
-<!-- <details> -->
+<details>
 <summary><strong>Q2:</strong> Rank the following methods from "least useful under covariate shift" to "most useful": (a) Bootstrap MLE, (b) Bayesian posterior predictive, (c) Split conformal, (d) Weighted conformal.</summary>
 
 **Least useful → Most useful under covariate shift:**
@@ -2039,9 +2369,9 @@ The unifying lesson: standard ML practices (CV, regularization, MLE) optimize fo
 4. **(d) Weighted conformal** — explicitly corrects for shift via importance weights, restoring coverage guarantees
 
 Note: (b) and (c) could be swapped depending on whether the model is well-specified. Bayesian is better if the model is correct; conformal is better if you don't trust the model but data is exchangeable.
-<!-- </details> -->
+</details>
 
-<!-- <details> -->
+<details>
 <summary><strong>Q3:</strong> Write the mathematical connection between Ridge regression and the Bayesian posterior mean. Why is this connection important?</summary>
 
 The Ridge solution is:
@@ -2055,7 +2385,7 @@ $$\mu_N = \left(\frac{1}{\alpha_{\text{prior}}} I + \frac{1}{\sigma^2} \Phi^\top
 Setting $\alpha_{\text{Ridge}} = \sigma^2 / \alpha_{\text{prior}}$ makes these identical. This means:
 - Ridge regression is the **MAP estimate** (maximum a posteriori) of Bayesian linear regression with a Gaussian prior.
 - But Ridge only gives you the *point estimate*, not the full posterior. The Bayesian approach gives you the entire distribution — and therefore uncertainty.
-<!-- </details> -->
+</details>
 
 ---
 
